@@ -1,0 +1,5 @@
+service: terminating-cleaner
+namespace: kube-system
+schedule: "0 0 * * *"
+maxAge: 86400 # in seconds
+dryRun: true 

@@ -1,0 +1,42 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ .Values.service }} 
+  namespace: {{ .Values.namespace }} 
+spec:
+  # run every midnight UTC
+  schedule: "{{ .Values.schedule }}"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 1
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          serviceAccountName: terminating-cleaner
+          restartPolicy: OnFailure
+          containers:
+            - name: {{ .Values.service }} 
+              image: bitnami/kubectl:latest
+              command:
+                - /bin/sh
+                - -c
+                - |
+                  NOW=$(date +%s)
+                  THRESHOLD=$((NOW - {{ .Values.maxAge }}))
+                  
+                  kubectl get pods -A \
+                    -o 'jsonpath={range .items[*]}{.metadata.deletionTimestamp}{"|"}{.metadata.namespace}{"|"}{.metadata.name}{"\n"}{end}' \
+                    | while IFS="|" read ts ns name; do
+
+                        # skip if no deletionTimestamp
+                        [ -z "$ts" ] && continue
+
+                        # Check if pod has been stuck in terminating for over THRESHOLD time
+                        if [ "$(date -d"$ts" +%s)" -lt "$THRESHOLD" ]; then
+                          echo "[WARNING] Forcing delete $ns/$name (stuck terminating)..."
+                          {{- if not .Values.dryRun }}
+                            kubectl patch pod "$name" -n "$ns" --type=merge -p '{"metadata":{"finalizers":[]}}'
+                          {{- end }}
+                        fi
+                      done
