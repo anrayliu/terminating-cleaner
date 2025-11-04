@@ -36,6 +36,7 @@ spec:
                         if [ "$(date -d"$ts" +%s)" -lt "$THRESHOLD" ]; then
                           echo "[WARNING] Forcing delete $ns/$name (stuck terminating)..."
                           {{- if not .Values.dryRun }}
+                            kubectl patch pod "$name" -n "$ns" --type=merge -p '{"metadata":{"finalizers":[]}}'
                             kubectl delete pod "$name" -n "$ns" --grace-period=0 --force
                           {{- end }}
                         fi
